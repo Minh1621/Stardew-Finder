@@ -283,9 +283,22 @@ browseQtyInput.addEventListener('input',   updateBrowseOutput);
 browseCondInput.addEventListener('input',  () => { validateBrowseCond(); updateBrowseOutput(); });
 
 // ── Called after items load — init grid ───────────────────────────────────────
+let browseFiltered  = [];
+let browseRendered  = 0;
+const BROWSE_PAGE   = 40;
+
 function initBrowseGrid() {
   browseCount.textContent = items.length + ' items';
-  renderBrowseGrid();
+  // Infinite scroll listener
+  browseGrid.addEventListener('scroll', onBrowseScroll);
+  scheduleBrowseRender();
+}
+
+function onBrowseScroll() {
+  const el = browseGrid;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+    loadMoreBrowseCards();
+  }
 }
 
 // Debounced render
@@ -299,45 +312,33 @@ function renderBrowseGrid() {
   const filterVal = browseFilter.value.trim().toLowerCase();
   const catVal    = browseCatFilter.value;
 
-  // Determine which prefix to match
-  // category select value is the prefix string (empty = objects = no prefix letters)
-  const filtered = items.filter(item => {
-    // category filter
-    if (catVal !== '') {
-      if (catVal === '') {
-        // Objects: id has no prefix letters
-        if (String(item.id).match(/^[^(]/)) {} else return false;
-      } else {
-        if (!String(item.id).startsWith(catVal)) return false;
-      }
-    }
-    // text filter
+  browseFiltered = items.filter(item => {
+    if (catVal !== '' && !String(item.id).startsWith(catVal)) return false;
     if (filterVal && !item.name.includes(filterVal) && !String(item.id).toLowerCase().includes(filterVal)) return false;
     return true;
   });
 
-  browseCount.textContent = filtered.length + ' / ' + items.length + ' items';
+  browseCount.textContent = browseFiltered.length + ' / ' + items.length + ' items';
+  browseGrid.innerHTML = '';
+  browseRendered = 0;
 
-  if (!filtered.length) {
+  if (!browseFiltered.length) {
     browseGrid.innerHTML = '<div class="basket-empty" style="padding:40px; grid-column:1/-1;">No items found ✦</div>';
     return;
   }
 
-  // Render in chunks to avoid jank
-  browseGrid.innerHTML = '';
-  const CHUNK = 80;
-  let idx = 0;
+  loadMoreBrowseCards();
+}
 
-  function renderChunk() {
-    const end = Math.min(idx + CHUNK, filtered.length);
-    const frag = document.createDocumentFragment();
-    for (; idx < end; idx++) {
-      frag.appendChild(makeBrowseCard(filtered[idx]));
-    }
-    browseGrid.appendChild(frag);
-    if (idx < filtered.length) requestAnimationFrame(renderChunk);
+function loadMoreBrowseCards() {
+  if (browseRendered >= browseFiltered.length) return;
+  const end  = Math.min(browseRendered + BROWSE_PAGE, browseFiltered.length);
+  const frag = document.createDocumentFragment();
+  for (let i = browseRendered; i < end; i++) {
+    frag.appendChild(makeBrowseCard(browseFiltered[i]));
   }
-  requestAnimationFrame(renderChunk);
+  browseRendered = end;
+  browseGrid.appendChild(frag);
 }
 
 // ── Make a single card ────────────────────────────────────────────────────────
